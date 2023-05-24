@@ -12,16 +12,38 @@ library(magrittr)
 #View(dataset)
 
 videoset = read.csv("data/Video_Games_Sales_as_at_22_Dec_2016.csv")
-View(videoset)
+View(dataset)
 
 ```
+## Check Type
+```{r}
+dataset %>% class()
+print(ncol(dataset))
+
+# check every column's type
+str(dataset)
+```
+
+## Change Type to correct type
+```{r}
+# change column 3 into "date" type
+library(lubridate)
+
+lubridate::ymd("2020") -> testdate
+
+print(testdate)
+# change column 13 into numeric type
+
+```
+
 
 -   sales 的單位是 million
 
 ## read progress
 
 ```{r}
-new = readRDS("final.RDS")
+dataset = readRDS("final.RDS")
+View(dataset)
 ```
 
 ## import JSON data
