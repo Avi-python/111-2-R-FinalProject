@@ -1,18 +1,35 @@
 # Final Project
+
 ```{r}
 source("R/helpers.R")
+library(magrittr)
 ```
 
+## Test1
+
+```{r}
+#dataset = read.csv("data/games.csv")
+#View(dataset)
+
+videoset = read.csv("data/Video_Games_Sales_as_at_22_Dec_2016.csv")
+View(videoset)
+
+```
+
+-   sales 的單位是 million
+
 ## read progress
+
 ```{r}
 new = readRDS("final.RDS")
 ```
+
 ## import JSON data
 
 ## Save progress
+
 ```{r}
-file = 2
-saveRDS(file, "final.RDS")
+saveRDS(videoset, "final.RDS")
 ```
 
 ```{r}
