@@ -3,6 +3,9 @@
 ```{r}
 source("R/helpers.R")
 library(magrittr)
+library(dplyr)
+library(glue)
+library(ggplot2)
 ```
 
 ## Test1
@@ -11,10 +14,20 @@ library(magrittr)
 #dataset = read.csv("data/games.csv")
 #View(dataset)
 
-videoset = read.csv("data/Video_Games_Sales_as_at_22_Dec_2016.csv")
+dataset = read.csv("data/Video_Games_Sales_as_at_22_Dec_2016.csv")
+dataset2 = read.csv("data/games.csv")
+
 View(dataset)
 
 ```
+
+# 論這筆資料
+
+-   sales 的單位是 million
+-   Critic_Count 代表得出 Critic_Score 共統計多少個評論家給出的分數
+-   User_Count 與上相同概念
+-   沒有 2018, 2019 的遊戲購買資料，而 2020、2017 的資料筆數少
+
 ## Check Type
 ```{r}
 dataset %>% class()
@@ -22,38 +35,201 @@ print(ncol(dataset))
 
 # check every column's type
 str(dataset)
+
+dataset[1, 3] %>% class()
 ```
 
 ## Change Type to correct type
 ```{r}
-# change column 3 into "date" type
+# change column 3 into "date" type, but now I change to integer first
 library(lubridate)
+# 因為只有給年，所以就直接在後面塞一個統一日月
+dataset$Year_of_Release <- as.Date(paste0(dataset$Year_of_Release, "-01-01"))
+lubridate::ymd(dataset$Year_of_Release) -> dataset$Year_of_Release
 
-lubridate::ymd("2020") -> testdate
-
-print(testdate)
 # change column 13 into numeric type
+as.numeric(dataset[,13]) -> dataset[,13]
+
+```
+## Check samples
+```{r}
+for(i in 1980:2020)
+{
+  grepl(glue("{i}-01-01"), dataset$Year_of_Release) -> matching_row
+  print(glue("{i}-01-01:{sum(matching_row)}"))
+}
+#grepl("2016-01-01", dataset$Year_of_Release) -> matching_row
+#dataset[matching_row, ]
+```
+
+可以捨棄掉 2017 以後的統計，因為所獲得的樣本太少，2000 年前樣本雖然低於 100 也是因為當時遊戲產出量不高，但 2017 後我想純粹是因為沒有收集到資訊
+
+# 分析銷量
+
+## Make a group by PlatForm ?
+```{r}
+GroupByPlatForm = group_by(dataset, Platform)
+GroupByPlatForm %>% tally()
+sorted_df <- grouped_df[order(grouped_df$Platform), ]
+View(sorted_df)
+## group by platform and sum up sales
+```
+
+## Make a group by Year ?
+```{r}
+GroupByYear = group_by(dataset, Year_of_Release)
+GroupByYear %>% summarise(
+  TotalSales = sum(Global_Sales, na.rm = T),
+  Na_TotalSales = sum(NA_Sales, na.rm = T),
+  Jp_TotalSales = sum(JP_Sales, na.rm = T),
+  Eu_TotalSales = sum(EU_Sales, na.rm = T),
+  Other_TotalSales = sum(Other_Sales, na.rm = T),
+  Avg_CriticScore = mean(Critic_Score, na.rm = T),
+  Avg_UserScore = mean(User_Score, na.rm = T)
+  ) -> summary_GroupByYear
+summary_GroupByYear
 
 ```
 
+- 先不論 2017 年以後，遊戲總銷量在 2008 年衝上頂端，但是專家評價相較於前後5年以來局部最低。
 
--   sales 的單位是 million
+
+## Analysis / Summerized group
+```{r}
+GroupByPlatForm %>% summarise(
+  Global_TotalSales = sum(Global_Sales),
+  NA_TotalSales = sum(NA_Sales),
+  JP_TotalSales = sum(JP_Sales),
+  EU_TotalSales = sum(EU_Sales),
+  Other_TotalSales = sum(Other_Sales),
+  Avg_Score = mean(Critic_Score, na.rm = T),
+  Avg_User_Score = mean(User_Score, na.rm = T),
+  TotalUserCount = sum(User_Count, na.rm = T)
+  ) -> summary_GroupByPlatForm
+
+summary_GroupByPlatForm[order(summary_GroupByPlatForm$Global_TotalSales),] -> summary_GroupByPlatFormOrdered 
+summary_GroupByPlatFormOrdered
+```
+
+- PS2 在 90 年代末帶來巨大的影響，由於這個 PS2 主機比起當時的 DVD play 便宜，孩子就可以透過這個理由說服父母買一台，並再透過各樣到位的宣傳讓銷量衝上巔峰。
+
+## Make a group by Publisher ?
+```{r}
+GroupByPublisher = group_by(dataset, Publisher)
+GroupByPublisher %>% summarise(
+  TotalSales = sum(Global_Sales, na.rm = T),
+  Na_TotalSales = sum(NA_Sales, na.rm = T),
+  Jp_TotalSales = sum(JP_Sales, na.rm = T),
+  Eu_TotalSales = sum(EU_Sales, na.rm = T),
+  Other_TotalSales = sum(Other_Sales, na.rm = T),
+  Avg_CriticScore = mean(Critic_Score, na.rm = T),
+  Avg_UserScore = mean(User_Score, na.rm = T)
+  ) -> summary_GroupByPublisher
+summary_GroupByYear
+summary_GroupByPublisher[order(summary_GroupByPublisher$TotalSales),] -> summary_GroupByPublisherOrdered
+summary_GroupByPublisherOrdered
+```
+
+- 如果是依廠商來劃分的話，任天堂有最高的銷量，必且擁有不錯的評價。
+
+# 深入分析 Nintendo
+
+## 特別將 Nintendo 的遊戲全部找出來
+```{r}
+dataset %>% group_by(Publisher) -> GroupByPublisher
+split_data <- split(dataset, dataset$Publisher)
+
+finder <- function(name) {
+  for(i in split_data)
+  {
+    if(i$Publisher[1] == name)
+    {
+      return(i)
+    }
+  }
+}
+
+Nintendo_DF = finder("Nintendo")
+Nintendo_DF %>% View()
+```
+
+## 繪製 Nintendo 遊戲銷量的摺線圖
+```{r}
+Nintendo_DF %>% group_by(Year_of_Release) -> Nintendo_DF_GroupByYear
+Nintendo_DF_GroupByYear %>% summarise(
+  TotalSales = sum(Global_Sales, na.rm = T),
+  Na_TotalSales = sum(NA_Sales, na.rm = T),
+  Jp_TotalSales = sum(JP_Sales, na.rm = T),
+  Eu_TotalSales = sum(EU_Sales, na.rm = T),
+  Other_TotalSales = sum(Other_Sales, na.rm = T),
+  Avg_CriticScore = mean(Critic_Score, na.rm = T),
+  Avg_UserScore = mean(User_Score, na.rm = T)
+  ) -> summary_NintendoGroupByPublisher
+summary_NintendoGroupByPublisher %>% View()
+y = summary_NintendoGroupByPublisher$TotalSales
+x = summary_NintendoGroupByPublisher$Year_of_Release
+df <- data.frame(x = x, y = y)
+ggplot(df, aes(x, y)) + geom_line() +
+  xlab("X-axis") + ylab("Y-axis") + ggtitle("Nintendo")
+```
+
+- 可以看到的是 Nintendo 在 2005 ~ 2008 年期間銷量相當驚人，Nintendo 所主打的就是非桌機類型的遊戲，在世代中間，電腦的性能不如今日可以承載很高畫質的遊戲，當時的我也差不多 4~5 歲，常常也是玩簡單的網頁遊戲，而在畫質無法明顯超越掌機的情況下，Nintendo 就將遊戲性做到完整，有完整的故事、耐人尋味的遊戲玩法，我想這就是 Nintendo 在當時銷量可以飆上去的原因。
+
+## 遊戲種類 Nintendo
+```{r}
+Nintendo_DF %>% group_by(Genre) -> Nintendo_DF_GroupByGenre
+Nintendo_DF_GroupByGenre %>% summarise(
+  TotalSales = sum(Global_Sales, na.rm = T),
+  Na_TotalSales = sum(NA_Sales, na.rm = T),
+  Jp_TotalSales = sum(JP_Sales, na.rm = T),
+  Eu_TotalSales = sum(EU_Sales, na.rm = T),
+  Other_TotalSales = sum(Other_Sales, na.rm = T),
+  Avg_CriticScore = mean(Critic_Score, na.rm = T),
+  Avg_UserScore = mean(User_Score, na.rm = T)
+  ) -> summary_NintendoGroupByGenre
+summary_NintendoGroupByGenre[order(summary_NintendoGroupByGenre$TotalSales),] -> summary_NintendoGroupByGenre
+summary_NintendoGroupByGenre
+```
+
+## Global 
+```{r}
+dataset %>% group_by(Genre) -> GroupByGenre
+GroupByGenre %>% summarise(
+  TotalSales = sum(Global_Sales, na.rm = T),
+  Na_TotalSales = sum(NA_Sales, na.rm = T),
+  Jp_TotalSales = sum(JP_Sales, na.rm = T),
+  Eu_TotalSales = sum(EU_Sales, na.rm = T),
+  Other_TotalSales = sum(Other_Sales, na.rm = T),
+  Avg_CriticScore = mean(Critic_Score, na.rm = T),
+  Avg_UserScore = mean(User_Score, na.rm = T)
+  ) -> summary_GroupByGenre
+summary_GroupByGenre[order(summary_GroupByGenre$TotalSales),] -> summary_GroupByGenre
+summary_GroupByGenre
+```
+
+可以看見 Nintendo 占了 Platform 遊戲近一半的銷量，而在全球銷量最多的射擊遊戲下，Nintendo 在射擊遊戲上面的投注就少很多，我想也是因為平台的關係，掌機類型的遊戲就沒辦法讓射擊、動作做得像其他如 PS 系列、XBOX、PC 之類的大型主機一樣好，在可以發會遊戲性的情況下，Nintendo 的角色扮演如寶可夢，或是平台遊戲的超級瑪莉歐，就可以有很好的發揮。
+而在國家個銷量上面就可以很明顯地看到，日本在角色扮演有最高的銷量，而歐美則是在射擊遊戲和動作遊戲上有超高的銷量，很可能是因為 Nintendo 是日本企業，直接影響了民眾，相對的 PS 系列 和 XBOX 所出的遊戲多數都是動作和射擊類型的遊戲，也就直接影響了歐美在這上面的銷量。
+
+## find something
+```{r}
+
+```
+
+# Preload
 
 ## read progress
 
 ```{r}
-dataset = readRDS("final.RDS")
+dataset = readRDS("RDSFile/final_dataset.RDS")
 View(dataset)
+str(dataset)
+GroupByPlatForm = readRDS("RDSFile/final_GroupByPlatForm.RDS")
+View(GroupByPlatForm)
 ```
-
-## import JSON data
 
 ## Save progress
 
 ```{r}
-saveRDS(videoset, "final.RDS")
-```
-
-```{r}
-Daniel = 1
+saveRDS(dataset, "RDSFile/final_dataset.RDS")
+saveRDS(GroupByPlatForm, "RDSFile/final_GroupByPlatForm.RDS")
 ```
